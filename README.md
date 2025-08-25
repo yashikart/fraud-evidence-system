@@ -1,3 +1,5 @@
+# Fraud_Sytem
+>>>>>>> ef85fba629d6180853ec54b8f2af6719339fb270
 # 🛡️ Fraud Evidence System
 
 A comprehensive blockchain-integrated fraud detection and evidence management system with ML-powered behavioral analysis.
@@ -247,3 +249,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 ⭐ Star this repository if it helped you build a robust fraud detection system!
+=======
+# Fraud_Sytem
+>>>>>>> ef85fba629d6180853ec54b8f2af6719339fb270
