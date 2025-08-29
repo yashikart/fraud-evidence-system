@@ -1,5 +1,4 @@
-# Fraud_Sytem
->>>>>>> ef85fba629d6180853ec54b8f2af6719339fb270
+
 # 🛡️ Fraud Evidence System
 
 A comprehensive blockchain-integrated fraud detection and evidence management system with ML-powered behavioral analysis.
