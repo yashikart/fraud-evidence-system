@@ -9,6 +9,7 @@ import EnforcementPanel from "../components/EnforcementPanel";
 import RLFeedbackPanel from "../components/RLFeedbackPanel";
 import CaseExportButton from "../components/CaseExportButton";
 import EvidenceLibrary from "../components/EvidenceLibrary";
+import Investigations from "../components/Investigations";
 
 const AdminPage = () => {
   const [reports, setReports] = useState([]);
@@ -399,7 +400,24 @@ const AdminPage = () => {
 
       {/* Evidence Library */}
       <div className="mt-10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-gray-800">📁 Evidence Library</h2>
+          <div className="text-sm text-gray-600">
+            Secure evidence management with blockchain verification
+          </div>
+        </div>
         <EvidenceLibrary />
+      </div>
+
+      {/* Investigations */}
+      <div className="mt-10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-gray-800">🔍 Investigations</h2>
+          <div className="text-sm text-gray-600">
+            Link multiple wallets/IPs under one investigation ID
+          </div>
+        </div>
+        <Investigations />
       </div>
     </div>
   );

@@ -1,15 +1,21 @@
 //middleware/auth.js
 const jwt = require("jsonwebtoken");
+const User = require('../models/User');
 
 const publicRoutes = [
   "/api/escalate",
   "/simulate-rbi-alert",
   "/health",
-  "/test"
+  "/test",
+  "/api/test/features",
+  "/api/test/evidence",
+  "/api/test/investigations",
+  "/api/flag"  // Allow flag endpoint for testing
 ];
 
-module.exports = (req, res, next) => {
-  if (publicRoutes.includes(req.path)) {
+module.exports = async (req, res, next) => {
+  // Skip authentication for public routes
+  if (publicRoutes.includes(req.path) || req.path.startsWith('/api/test/')) {
     console.log("🔓 Public route, skipping auth:", req.path);
     return next();
   }
@@ -31,28 +37,42 @@ module.exports = (req, res, next) => {
   }
 
   try {
-    const jwtSecret = process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET;
+    const jwtSecret = process.env.JWT_SECRET;
 
     if (!jwtSecret) {
       console.error("❌ JWT secret not defined in environment");
       return res.status(500).json({ message: "Server configuration error" });
     }
 
-    const payload = jwt.verify(token, jwtSecret, {
-      issuer: `https://${process.env.SUPABASE_PROJECT_REF}.supabase.co/auth/v1`
-    });
+    // Verify JWT token (local format, not Supabase)
+    const payload = jwt.verify(token, jwtSecret);
 
     console.log("✅ JWT verified:", {
-      email: payload.email,
-      role: payload.role,
-      sub: payload.sub
+      userId: payload.userId,
+      role: payload.role
     });
 
+    // Get full user details from database
+    const user = await User.findById(payload.userId).select('-password');
+    if (!user) {
+      console.log("❌ User not found in database:", payload.userId);
+      return res.status(403).json({ message: "User not found" });
+    }
+
+    // Attach user information to request
     req.user = {
-      email: payload.email,
-      role: payload.role,
-      sub: payload.sub
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      permissions: user.permissions || [],
+      isActive: user.isActive !== false // default to true if not set
     };
+
+    console.log("✅ User authenticated:", {
+      email: req.user.email,
+      role: req.user.role,
+      permissions: req.user.permissions.length
+    });
 
     next();
   } catch (err) {

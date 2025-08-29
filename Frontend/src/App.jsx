@@ -17,7 +17,6 @@ import AlertLog from "./components/AlertLog";
 import AdminDownloadTable from "./components/AdminDownloadTable";
 import "leaflet/dist/leaflet.css";
 
-
 function HomePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -115,8 +114,36 @@ function HomePage() {
     }
   };
 
+  // Restore session from localStorage
   useEffect(() => {
     const restoreSession = async () => {
+      // Try to restore session from our custom auth token first
+      const token = localStorage.getItem("authToken");
+      if (token) {
+        try {
+          const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5050';
+          const response = await fetch(`${backendUrl}/api/auth/verify`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            const userData = await response.json();
+            setUser({
+              id: userData.id,
+              email: userData.email,
+              role: userData.role
+            });
+            setLoading(false);
+            return;
+          }
+        } catch (error) {
+          console.error("Error verifying custom auth token:", error);
+        }
+      }
+      
+      // Fallback to Supabase session
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         localStorage.setItem("authToken", session.access_token);
@@ -125,6 +152,7 @@ function HomePage() {
       }
       setLoading(false);
     };
+    
     restoreSession();
     checkMongoConnection();
   }, [checkMongoConnection]);
@@ -171,25 +199,77 @@ function HomePage() {
   };
 
   const signIn = async () => {
-    const { data: loginData, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    // Try backend authentication first
+    try {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5050';
+      const response = await fetch(`${backendUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email,
+          password
+        })
+      });
 
-    if (error) {
-      alert(error.message);
-      return;
+      const data = await response.json();
+      
+      if (response.ok && data.token) {
+        // Store the backend JWT token
+        localStorage.setItem("authToken", data.token);
+        
+        // Get user info
+        const userResponse = await fetch(`${backendUrl}/api/auth/verify`, {
+          headers: {
+            'Authorization': `Bearer ${data.token}`
+          }
+        });
+        
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          localStorage.setItem("userInfo", JSON.stringify(userData));
+          setUser({
+            id: userData.id,
+            email: userData.email,
+            role: userData.role
+          });
+          alert("Login successful!");
+        } else {
+          alert("Login successful, but failed to get user info");
+        }
+      } else {
+        // Fallback to Supabase authentication
+        const { data: loginData, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          alert(error.message);
+          return;
+        }
+
+        const { session, user } = loginData;
+        localStorage.setItem("authToken", session.access_token);
+        localStorage.setItem("userInfo", JSON.stringify(user));
+        setUser(user);
+        alert("Login successful!");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      alert("Login failed: " + error.message);
     }
-
-    const { session, user } = loginData;
-    localStorage.setItem("authToken", session.access_token);
-    localStorage.setItem("userInfo", JSON.stringify(user));
-    setUser(user);
-    alert("Login successful!");
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    // Clear both Supabase and backend auth
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Supabase sign out error:", error);
+    }
+    
     localStorage.removeItem("authToken");
     localStorage.removeItem("userInfo");
     setUser(null);
@@ -254,31 +334,19 @@ function HomePage() {
       );
 
       if (response.ok) {
-        toast.success("📨 Report submitted!");
-        count[today]++;
-        localStorage.setItem("reportCount", JSON.stringify(count));
-        
-        // Enable evidence management after successful report submission
+        toast.success("✅ Report submitted successfully!");
+        setWallet("");
+        setReason("");
         setReportSubmitted(true);
         setSubmittedWallet(wallet);
-        setEvidenceWallet(wallet); // Pre-fill evidence wallet with submitted wallet
-        
-        setReason("");
-        fetchReports();
+        fetchReports(); // Refresh reports
       } else {
-        let errorText = "Unknown error";
-        try {
-          const err = await response.json();
-          errorText = err?.error || "Unknown error";
-        } catch (parseError) {
-          errorText = await response.text();
-        }
-        alert("Failed to submit report: " + errorText);
-        console.error("❌ Error submitting report:", errorText);
+        const errorData = await response.json();
+        toast.error(`❌ Report submission failed: ${errorData.error}`);
       }
     } catch (err) {
-      alert("Failed to submit report: Network error");
-      console.error("❌ Network error:", err.message);
+      console.error("❌ Submission error:", err);
+      toast.error("❌ Report submission failed");
     }
   };
 

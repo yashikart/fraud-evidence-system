@@ -1,5 +1,6 @@
 // services/evidenceContractService.js
 const crypto = require('crypto');
+const chainOfCustodyService = require('./chainOfCustodyService');
 
 class EvidenceContractService {
   constructor() {
@@ -177,38 +178,120 @@ class EvidenceContractService {
     }
   }
 
-  // Create evidence trail for visualization
-  async getEvidenceTrail(caseId) {
+  // Create comprehensive evidence trail for visualization using chain of custody service
+  async getEvidenceTrail(caseId, entity = null) {
     try {
-      const evidenceResult = await this.getEvidenceByCaseId(caseId);
-      if (!evidenceResult.success) {
-        return evidenceResult;
+      // Get comprehensive timeline from chain of custody service
+      const timelineResult = await chainOfCustodyService.generateTimeline(caseId, entity);
+      
+      if (!timelineResult.success) {
+        return {
+          success: false,
+          error: timelineResult.error
+        };
       }
 
-      const trail = evidenceResult.evidenceList
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-        .map((evidence, index) => ({
-          step: index + 1,
-          type: 'Evidence Upload',
-          description: `Evidence hash stored for entity: ${evidence.entity}`,
-          hash: evidence.evidenceHash,
-          txHash: evidence.txHash,
-          blockNumber: evidence.blockNumber,
-          timestamp: evidence.timestamp,
-          status: 'confirmed'
-        }));
+      // Convert timeline to trail format for backward compatibility
+      const trail = timelineResult.timeline.map((event, index) => ({
+        step: index + 1,
+        type: this.formatEventType(event.type),
+        description: event.description,
+        icon: event.icon,
+        priority: event.priority,
+        timestamp: event.timestamp,
+        entity: event.entity,
+        caseId: event.caseId,
+        data: event.data,
+        status: this.getEventStatus(event),
+        timeGap: event.timeGap
+      }));
 
       return {
         success: true,
         trail,
-        caseId
+        caseId,
+        entity,
+        summary: timelineResult.summary,
+        comprehensiveData: timelineResult
       };
     } catch (error) {
-      console.error('Error creating evidence trail:', error);
+      console.error('Error creating comprehensive evidence trail:', error);
       return {
         success: false,
         error: error.message
       };
+    }
+  }
+
+  // Get linked evidence trail for multiple entities
+  async getLinkedEvidenceTrail(entities, investigationId = null) {
+    try {
+      const linkedResult = await chainOfCustodyService.generateLinkedTimeline(entities, investigationId);
+      
+      if (!linkedResult.success) {
+        return {
+          success: false,
+          error: linkedResult.error
+        };
+      }
+
+      // Convert to trail format
+      const trail = linkedResult.timeline.map((event, index) => ({
+        step: index + 1,
+        type: this.formatEventType(event.type),
+        description: event.description,
+        icon: event.icon,
+        priority: event.priority,
+        timestamp: event.timestamp,
+        entity: event.entity,
+        sourceEntity: event.sourceEntity,
+        caseId: event.caseId,
+        investigationId: event.investigationId,
+        data: event.data,
+        status: this.getEventStatus(event)
+      }));
+
+      return {
+        success: true,
+        trail,
+        entities,
+        investigationId,
+        summary: linkedResult.summary,
+        comprehensiveData: linkedResult
+      };
+    } catch (error) {
+      console.error('Error creating linked evidence trail:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // Helper methods for formatting
+  formatEventType(eventType) {
+    const typeMap = {
+      'report_submitted': 'Report Submitted',
+      'evidence_uploaded': 'Evidence Upload',
+      'risk_assessment': 'Risk Assessment',
+      'ip_traced': 'IP Geolocation',
+      'escalation': 'Escalation',
+      'verification': 'Verification',
+      'action_taken': 'Action Taken'
+    };
+    return typeMap[eventType] || eventType;
+  }
+
+  getEventStatus(event) {
+    switch (event.type) {
+      case 'evidence_uploaded':
+        return event.data?.verificationStatus || 'confirmed';
+      case 'escalation':
+        return event.data?.success ? 'confirmed' : 'failed';
+      case 'verification':
+        return event.data?.integrityStatus === 'intact' ? 'confirmed' : 'failed';
+      default:
+        return 'confirmed';
     }
   }
 }

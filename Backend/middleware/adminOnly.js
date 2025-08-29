@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-module.exports = (req, res, next) => {
+module.exports = async (req, res, next) => {
   console.log("=== 🔐 ADMIN ONLY CHECK ===");
 
   let user = req.user;
@@ -21,11 +22,40 @@ module.exports = (req, res, next) => {
     }
   }
 
-  if (!user || user.role !== "admin") {
-    console.log("❌ Admin access denied for user:", user?.email || "unknown");
+  if (!user) {
+    console.log("❌ No user found");
     return res.status(403).json({ error: "Admin access required" });
   }
 
-  console.log("✅ Admin access granted to:", user.email || user.id);
-  next();
+  try {
+    // Get full user details from database to check role and permissions
+    const fullUser = await User.findById(user.id || user._id);
+    
+    if (!fullUser) {
+      console.log("❌ User not found in database:", user.email || user.id);
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    if (!fullUser.isActive) {
+      console.log("❌ User account is deactivated:", fullUser.email);
+      return res.status(403).json({ error: "Account is deactivated" });
+    }
+
+    // Check if user has admin or superadmin role
+    if (!['admin', 'superadmin'].includes(fullUser.role)) {
+      console.log("❌ Admin access denied for user:", fullUser.email, "Role:", fullUser.role);
+      return res.status(403).json({ 
+        error: "Admin access required",
+        userRole: fullUser.role,
+        requiredRoles: ['admin', 'superadmin']
+      });
+    }
+
+    console.log("✅ Admin access granted to:", fullUser.email, "Role:", fullUser.role);
+    req.currentUser = fullUser; // Add full user object for downstream use
+    next();
+  } catch (error) {
+    console.error("❌ Error checking admin access:", error);
+    return res.status(500).json({ error: "Admin access verification failed" });
+  }
 };
